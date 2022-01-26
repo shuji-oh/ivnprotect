@@ -1009,43 +1009,43 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 						 tx_work);
 	struct spi_device *spi = priv->spi;
 	struct net_device *net = priv->net;
-	struct can_frame *frame;
+	struct can_frame *frame = (struct can_frame *)priv->tx_skb->data;
     int diff_nstime; // add for IVNProtect
 
 	mutex_lock(&priv->mcp_lock);
+    if (canid_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be bus-off and preserve an attacker process pid.
+        attacker_pid = sys_getpid();
+        priv->can.state = CAN_ERR_BUSOFF;
+    } else {
+        if (attacker_pid  == sys_getpid()) { // in case of the attacker process, the interface will be bus-off state.
+            priv->can.state = CAN_ERR_BUSOFF;
+        } else { // in case of neither malicious ID nor the malicious process, the interface recovers from bus-off state.
+            priv->can.state = CAN_STATE_ERROR_ACTIVE;
+        }
+    }
 	if (priv->tx_skb) {
 		if (priv->can.state == CAN_STATE_BUS_OFF) {
 			mcp251x_clean(net);
 		} else {
-			frame = (struct can_frame *)priv->tx_skb->data;
-
 			if (frame->can_dlc > CAN_FRAME_MAX_DATA_LEN)
 				frame->can_dlc = CAN_FRAME_MAX_DATA_LEN;
             
             // add for IVNProtect
             ktime_get_coarse_real_ts64(&ts_current);
             diff_nstime = (ts_current.tv_nsec-ts_prev.tv_nsec);
-            if (canid_whitelist[frame->can_id]==1) {
+            if (diff_nstime < DOS_TIME_CYCLE) {
+                attacker_pid = sys_getpid(); // in case of malicious arrival time, the interface will preserve an attacker process pid.
+                mdelay(5); // rate limiting 
                 mcp251x_hw_tx(spi, frame, 0);
                 priv->tx_len = 1 + frame->can_dlc;
                 can_put_echo_skb(priv->tx_skb, net, 0);
                 priv->tx_skb = NULL;
             } else {
-                if (diff_nstime < DOS_TIME_CYCLE) {
-                    /* do nothing */
-                    mdelay(5);
-                    mcp251x_hw_tx(spi, frame, 0);
-                    priv->tx_len = 1 + frame->can_dlc;
-                    can_put_echo_skb(priv->tx_skb, net, 0);
-                    priv->tx_skb = NULL;
-                } else {
-                    mcp251x_hw_tx(spi, frame, 0);
-                    priv->tx_len = 1 + frame->can_dlc;
-                    can_put_echo_skb(priv->tx_skb, net, 0);
-                    priv->tx_skb = NULL;
-                }
+                mcp251x_hw_tx(spi, frame, 0);
+                priv->tx_len = 1 + frame->can_dlc;
+                can_put_echo_skb(priv->tx_skb, net, 0);
+                priv->tx_skb = NULL;
             }
-
             ts_prev.tv_sec = ts_current.tv_sec;
             ts_prev.tv_nsec = ts_current.tv_nsec;
 		}
