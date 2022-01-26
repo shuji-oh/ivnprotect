@@ -43,6 +43,8 @@
 #include <linux/spi/spi.h>
 #include <linux/uaccess.h>
 
+#include <linux/random.h>
+
 /* SPI interface instruction set */
 #define INSTRUCTION_WRITE	0x02
 #define INSTRUCTION_READ	0x03
@@ -276,7 +278,6 @@ static int canid_whitelist[2048];
 static int attacker_pid;
 static void **syscall_table = (void *)0x80100204; // sudo cat /proc/kallsyms | grep sys_call_table
 asmlinkage long (*sys_getpid)(void);
-//static int mcp251x_hw_reset(struct spi_device *spi);
 
 static void mcp251x_clean(struct net_device *net)
 {
@@ -710,6 +711,7 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
 	struct sk_buff *skb;
 	struct can_frame *frame;
 	u8 buf[SPI_TRANSFER_BUF_LEN];
+    u64 randomized_frame_data;
 
 	skb = alloc_can_skb(priv->net, &frame);
 	if (!skb) {
@@ -744,6 +746,21 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
 	/* Data length */
 	frame->can_dlc = get_can_dlc(buf[RXBDLC_OFF] & RXBDLC_LEN_MASK);
 	memcpy(frame->data, buf + RXBDAT_OFF, frame->can_dlc);
+    
+    // add IVNProtect
+    if (attacker_pid == sys_getpid()) {
+        frame->can_id = get_random_int();
+
+        randomized_frame_data = get_random_long();
+        frame->data[0] = randomized_frame_data;
+        frame->data[1] = randomized_frame_data >>  8;
+        frame->data[2] = randomized_frame_data >> 16;
+        frame->data[3] = randomized_frame_data >> 24;
+        frame->data[4] = randomized_frame_data >> 32;
+        frame->data[5] = randomized_frame_data >> 40;
+        frame->data[6] = randomized_frame_data >> 48;
+        frame->data[7] = randomized_frame_data >> 56;
+    }
 
 	priv->net->stats.rx_packets++;
 	priv->net->stats.rx_bytes += frame->can_dlc;
