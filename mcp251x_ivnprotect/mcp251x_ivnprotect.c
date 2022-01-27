@@ -715,7 +715,7 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
 	struct sk_buff *skb;
 	struct can_frame *frame;
 	u8 buf[SPI_TRANSFER_BUF_LEN];
-    u64 randomized_frame_data;
+        u64 randomized_frame_data;
 
 	skb = alloc_can_skb(priv->net, &frame);
 	if (!skb) {
