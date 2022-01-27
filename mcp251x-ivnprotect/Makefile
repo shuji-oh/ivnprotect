@@ -1,7 +1,7 @@
 
 KERNEL_DIR = /lib/modules/$(shell uname -r)/build
 
-obj-m := mcp251x.o
+obj-m := mcp251x-ivnprotect.o
 
 all:
 	make -C $(KERNEL_DIR) M=$(shell pwd) modules
