@@ -273,7 +273,7 @@ MCP251X_IS(2510);
 
 
 // add for IVNProtect
-#define DOS_TIME_CYCLE 400000
+#define DOS_TIME_CYCLE 1000000
 #define AUTHORIZED_USER 1000
 u64 current_ns, prev_ns;
 static int canid_whitelist[2048];
@@ -1061,13 +1061,13 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
             current_ns = ktime_get_clocktai_ns();
             diff_nstime = (current_ns - prev_ns);
             if (diff_nstime < DOS_TIME_CYCLE) {
-                attacker_pid = sys_getpid(); // in case of malicious arrival time, the interface will preserve an attacker process pid.
+                //attacker_pid = sys_getpid(); // in case of malicious arrival time, the interface will preserve an attacker process pid.
                 mdelay(5); // rate limiting 
                 mcp251x_hw_tx(spi, frame, 0);
                 priv->tx_len = 1 + frame->can_dlc;
                 can_put_echo_skb(priv->tx_skb, net, 0);
                 priv->tx_skb = NULL;
-                printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Rate_limiting", attacker_pid);
+                printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Rate_limiting", sys_getpid());
             } else {
                 mcp251x_hw_tx(spi, frame, 0);
                 priv->tx_len = 1 + frame->can_dlc;
@@ -1361,6 +1361,13 @@ static int mcp251x_can_probe(struct spi_device *spi)
 	int ret;
 
     // add for IVNProtect
+    canid_whitelist[0x3B8] = 1;
+    canid_whitelist[0x3B9] = 1;
+    canid_whitelist[0x3BA] = 1;
+    canid_whitelist[0x3BC] = 1;
+    canid_whitelist[0x3BD] = 1;
+    canid_whitelist[0x463] = 1;
+
     canid_whitelist[0x127] = 1;
     canid_whitelist[0x1c4] = 1;
     canid_whitelist[0x20] = 1;
