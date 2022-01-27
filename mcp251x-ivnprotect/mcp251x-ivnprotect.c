@@ -44,6 +44,7 @@
 #include <linux/uaccess.h>
 
 #include <linux/random.h>
+#include <asm/current.h>
 
 /* SPI interface instruction set */
 #define INSTRUCTION_WRITE	0x02
@@ -273,12 +274,14 @@ MCP251X_IS(2510);
 
 // add for IVNProtect
 #define DOS_TIME_CYCLE 400000
-struct timespec64 ts_current, ts_prev;
+#define AUTHORIZED_USER 1000
+u64 current_ns, prev_ns;
 static int canid_whitelist[2048];
 static int attacker_pid;
-static int benign_pid;
+static uid_t benign_uid;
 static void **syscall_table = (void *)0x80100204; // sudo cat /proc/kallsyms | grep sys_call_table
 asmlinkage long (*sys_getpid)(void);
+asmlinkage long (*sys_getuid)(void);
 
 static void mcp251x_clean(struct net_device *net)
 {
@@ -749,8 +752,8 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
 	memcpy(frame->data, buf + RXBDAT_OFF, frame->can_dlc);
     
     // add IVNProtect
-    if (benign_pid) benign_pid = sys_getpid();
-    if (benign_pid != sys_getpid()) {
+    if (benign_uid) benign_uid = (current->cred)->uid.val;
+    if (benign_uid != AUTHORIZED_USER) {
         frame->can_id = get_random_int();
 
         randomized_frame_data = get_random_long();
@@ -762,7 +765,7 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
         frame->data[5] = randomized_frame_data >> 40;
         frame->data[6] = randomized_frame_data >> 48;
         frame->data[7] = randomized_frame_data >> 56;
-        printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Randomized_can_frame", sys_getpid());
+        printk(KERN_NOTICE "[IVNProtect] PID:%d UID:%d LOG:Randomized_can_frame T:%llu", current->pid, benign_uid, ktime_get_clocktai_ns());
     }
 
 	priv->net->stats.rx_packets++;
@@ -1030,17 +1033,17 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 	struct spi_device *spi = priv->spi;
 	struct net_device *net = priv->net;
 	struct can_frame *frame = (struct can_frame *)priv->tx_skb->data;
-    int diff_nstime; // add for IVNProtect
+    unsigned long diff_nstime; // add for IVNProtect
 
 	mutex_lock(&priv->mcp_lock);
     if (canid_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be bus-off and preserve an attacker process pid.
         attacker_pid = sys_getpid();
         priv->can.state = CAN_ERR_BUSOFF;
-        printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition", attacker_pid);
+        printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition1", attacker_pid);
     } else {
         if (attacker_pid  == sys_getpid()) { // in case of the attacker process, the interface will be bus-off state.
             priv->can.state = CAN_ERR_BUSOFF;
-            printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition", attacker_pid);
+            printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition2", attacker_pid);
         } else { // in case of neither malicious ID nor the malicious process, the interface recovers from bus-off state.
             priv->can.state = CAN_STATE_ERROR_ACTIVE;
             printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Bus-off_state_recover", sys_getpid());
@@ -1054,8 +1057,8 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 				frame->can_dlc = CAN_FRAME_MAX_DATA_LEN;
             
             // add for IVNProtect
-            ktime_get_coarse_real_ts64(&ts_current);
-            diff_nstime = (ts_current.tv_nsec-ts_prev.tv_nsec);
+            current_ns = ktime_get_clocktai_ns();
+            diff_nstime = (current_ns - prev_ns);
             if (diff_nstime < DOS_TIME_CYCLE) {
                 attacker_pid = sys_getpid(); // in case of malicious arrival time, the interface will preserve an attacker process pid.
                 mdelay(5); // rate limiting 
@@ -1070,8 +1073,7 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
                 can_put_echo_skb(priv->tx_skb, net, 0);
                 priv->tx_skb = NULL;
             }
-            ts_prev.tv_sec = ts_current.tv_sec;
-            ts_prev.tv_nsec = ts_current.tv_nsec;
+            prev_ns = current_ns;
 		}
 	}
 	mutex_unlock(&priv->mcp_lock);
