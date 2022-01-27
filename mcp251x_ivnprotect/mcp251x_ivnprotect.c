@@ -752,7 +752,6 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
 	memcpy(frame->data, buf + RXBDAT_OFF, frame->can_dlc);
     
         // add IVNProtect 
-        /*
         if (benign_uid) benign_uid = (current->cred)->uid.val;
         if (benign_uid != AUTHORIZED_USER) {
             frame->can_id = get_random_int();
@@ -766,8 +765,8 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
             frame->data[5] = randomized_frame_data >> 40;
             frame->data[6] = randomized_frame_data >> 48;
             frame->data[7] = randomized_frame_data >> 56;
-            printk(KERN_NOTICE "[IVNProtect] PID:%d UID:%d LOG:Randomized_can_frame", current->pid, benign_uid);
-        } */
+            printk(KERN_NOTICE "[IVNProtect] PID:%d UID:%d LOG:Randomized_can_frame STATE:%d", current->pid, benign_uid, priv->can.state);
+        } 
 
 	priv->net->stats.rx_packets++;
 	priv->net->stats.rx_bytes += frame->can_dlc;
@@ -1038,21 +1037,22 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 
 	mutex_lock(&priv->mcp_lock);
         if (canid_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be bus-off and preserve an attacker process pid.
-            attacker_pid = sys_getpid();
-            priv->can.state = CAN_STATE_BUS_OFF;
-            printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition1", attacker_pid);
-        } else {
-            if (attacker_pid  == sys_getpid()) { // in case of the attacker process, the interface will be bus-off state.
+                attacker_pid = sys_getpid();
                 priv->can.state = CAN_STATE_BUS_OFF;
-                printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition2", attacker_pid);
-            } else { // in case of neither malicious ID nor the malicious process, the interface recovers from bus-off state.
-                priv->can.state = CAN_STATE_ERROR_ACTIVE;
-                printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Bus-off_state_recover", sys_getpid());
-            }
+                printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition1", attacker_pid);
+        } else {
+                if (attacker_pid  == sys_getpid()) { // in case of the attacker process, the interface will be bus-off state.
+                        priv->can.state = CAN_STATE_BUS_OFF;
+                        printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition2", attacker_pid);
+                } else { // in case of neither malicious ID nor the malicious process, the interface recovers from bus-off state.
+                        priv->can.state = CAN_STATE_ERROR_ACTIVE;
+                        printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Bus-off_state_recover", sys_getpid());
+                }
         }
 	if (priv->tx_skb) {
 		if (priv->can.state == CAN_STATE_BUS_OFF) {
 			mcp251x_clean(net);
+                        netif_wake_queue(net);
 		} else {
 			if (frame->can_dlc > CAN_FRAME_MAX_DATA_LEN)
 				frame->can_dlc = CAN_FRAME_MAX_DATA_LEN;
@@ -1456,6 +1456,7 @@ static int mcp251x_can_probe(struct spi_device *spi)
         canid_whitelist[0xaa] = 1;
         canid_whitelist[0xb4] = 1;
         sys_getpid = syscall_table[__NR_getpid];
+        sys_getuid = syscall_table[__NR_getuid];
 
 	clk = devm_clk_get_optional(&spi->dev, NULL);
 	if (IS_ERR(clk))
