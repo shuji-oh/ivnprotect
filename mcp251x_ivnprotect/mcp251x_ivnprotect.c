@@ -751,23 +751,23 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
 	frame->can_dlc = get_can_dlc(buf[RXBDLC_OFF] & RXBDLC_LEN_MASK);
 	memcpy(frame->data, buf + RXBDAT_OFF, frame->can_dlc);
     
-    // add IVNProtect 
-    /*
-    if (benign_uid) benign_uid = (current->cred)->uid.val;
-    if (benign_uid != AUTHORIZED_USER) {
-        frame->can_id = get_random_int();
+        // add IVNProtect 
+        /*
+        if (benign_uid) benign_uid = (current->cred)->uid.val;
+        if (benign_uid != AUTHORIZED_USER) {
+            frame->can_id = get_random_int();
 
-        randomized_frame_data = get_random_long();
-        frame->data[0] = randomized_frame_data;
-        frame->data[1] = randomized_frame_data >>  8;
-        frame->data[2] = randomized_frame_data >> 16;
-        frame->data[3] = randomized_frame_data >> 24;
-        frame->data[4] = randomized_frame_data >> 32;
-        frame->data[5] = randomized_frame_data >> 40;
-        frame->data[6] = randomized_frame_data >> 48;
-        frame->data[7] = randomized_frame_data >> 56;
-        printk(KERN_NOTICE "[IVNProtect] PID:%d UID:%d LOG:Randomized_can_frame", current->pid, benign_uid);
-    } */
+            randomized_frame_data = get_random_long();
+            frame->data[0] = randomized_frame_data;
+            frame->data[1] = randomized_frame_data >>  8;
+            frame->data[2] = randomized_frame_data >> 16;
+            frame->data[3] = randomized_frame_data >> 24;
+            frame->data[4] = randomized_frame_data >> 32;
+            frame->data[5] = randomized_frame_data >> 40;
+            frame->data[6] = randomized_frame_data >> 48;
+            frame->data[7] = randomized_frame_data >> 56;
+            printk(KERN_NOTICE "[IVNProtect] PID:%d UID:%d LOG:Randomized_can_frame", current->pid, benign_uid);
+        } */
 
 	priv->net->stats.rx_packets++;
 	priv->net->stats.rx_bytes += frame->can_dlc;
@@ -1034,22 +1034,22 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 	struct spi_device *spi = priv->spi;
 	struct net_device *net = priv->net;
 	struct can_frame *frame = (struct can_frame *)priv->tx_skb->data;
-    unsigned long diff_nstime; // add for IVNProtect
+        unsigned long diff_nstime; // add for IVNProtect
 
 	mutex_lock(&priv->mcp_lock);
-    if (canid_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be bus-off and preserve an attacker process pid.
-        attacker_pid = sys_getpid();
-        priv->can.state = CAN_STATE_BUS_OFF;
-        printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition1", attacker_pid);
-    } else {
-        if (attacker_pid  == sys_getpid()) { // in case of the attacker process, the interface will be bus-off state.
+        if (canid_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be bus-off and preserve an attacker process pid.
+            attacker_pid = sys_getpid();
             priv->can.state = CAN_STATE_BUS_OFF;
-            printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition2", attacker_pid);
-        } else { // in case of neither malicious ID nor the malicious process, the interface recovers from bus-off state.
-            priv->can.state = CAN_STATE_ERROR_ACTIVE;
-            printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Bus-off_state_recover", sys_getpid());
+            printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition1", attacker_pid);
+        } else {
+            if (attacker_pid  == sys_getpid()) { // in case of the attacker process, the interface will be bus-off state.
+                priv->can.state = CAN_STATE_BUS_OFF;
+                printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition2", attacker_pid);
+            } else { // in case of neither malicious ID nor the malicious process, the interface recovers from bus-off state.
+                priv->can.state = CAN_STATE_ERROR_ACTIVE;
+                printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Bus-off_state_recover", sys_getpid());
+            }
         }
-    }
 	if (priv->tx_skb) {
 		if (priv->can.state == CAN_STATE_BUS_OFF) {
 			mcp251x_clean(net);
@@ -1057,24 +1057,24 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 			if (frame->can_dlc > CAN_FRAME_MAX_DATA_LEN)
 				frame->can_dlc = CAN_FRAME_MAX_DATA_LEN;
             
-            // add for IVNProtect
-            current_ns = ktime_get_clocktai_ns();
-            diff_nstime = (current_ns - prev_ns);
-            if (diff_nstime < DOS_TIME_CYCLE) {
-                //attacker_pid = sys_getpid(); // in case of malicious arrival time, the interface will preserve an attacker process pid.
-                mdelay(5); // rate limiting 
-                mcp251x_hw_tx(spi, frame, 0);
-                priv->tx_len = 1 + frame->can_dlc;
-                can_put_echo_skb(priv->tx_skb, net, 0);
-                priv->tx_skb = NULL;
-                printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Rate_limiting", sys_getpid());
-            } else {
-                mcp251x_hw_tx(spi, frame, 0);
-                priv->tx_len = 1 + frame->can_dlc;
-                can_put_echo_skb(priv->tx_skb, net, 0);
-                priv->tx_skb = NULL;
-            }
-            prev_ns = current_ns;
+                        // add for IVNProtect
+                        current_ns = ktime_get_clocktai_ns();
+                        diff_nstime = (current_ns - prev_ns);
+                        if (diff_nstime < DOS_TIME_CYCLE) {
+                                //attacker_pid = sys_getpid(); // in case of malicious arrival time, the interface will preserve an attacker process pid.
+                                mdelay(5); // rate limiting 
+                                mcp251x_hw_tx(spi, frame, 0);
+                                priv->tx_len = 1 + frame->can_dlc;
+                                can_put_echo_skb(priv->tx_skb, net, 0);
+                                priv->tx_skb = NULL;
+                                printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Rate_limiting", sys_getpid());
+                        } else {
+                                mcp251x_hw_tx(spi, frame, 0);
+                                priv->tx_len = 1 + frame->can_dlc;
+                                can_put_echo_skb(priv->tx_skb, net, 0);
+                                priv->tx_skb = NULL;
+                        }
+                        prev_ns = current_ns;
 		}
 	}
 	mutex_unlock(&priv->mcp_lock);
@@ -1360,102 +1360,102 @@ static int mcp251x_can_probe(struct spi_device *spi)
 	u32 freq;
 	int ret;
 
-    // add for IVNProtect
-    canid_whitelist[0x3B8] = 1;
-    canid_whitelist[0x3B9] = 1;
-    canid_whitelist[0x3BA] = 1;
-    canid_whitelist[0x3BC] = 1;
-    canid_whitelist[0x3BD] = 1;
-    canid_whitelist[0x463] = 1;
+        // add for IVNProtect
+        canid_whitelist[0x3B8] = 1;
+        canid_whitelist[0x3B9] = 1;
+        canid_whitelist[0x3BA] = 1;
+        canid_whitelist[0x3BC] = 1;
+        canid_whitelist[0x3BD] = 1;
+        canid_whitelist[0x463] = 1;
 
-    canid_whitelist[0x127] = 1;
-    canid_whitelist[0x1c4] = 1;
-    canid_whitelist[0x20] = 1;
-    canid_whitelist[0x224] = 1;
-    canid_whitelist[0x230] = 1;
-    canid_whitelist[0x24] = 1;
-    canid_whitelist[0x245] = 1;
-    canid_whitelist[0x247] = 1;
-    canid_whitelist[0x25] = 1;
-    canid_whitelist[0x260] = 1;
-    canid_whitelist[0x2a4] = 1;
-    canid_whitelist[0x320] = 1;
-    canid_whitelist[0x353] = 1;
-    canid_whitelist[0x361] = 1;
-    canid_whitelist[0x380] = 1;
-    canid_whitelist[0x381] = 1;
-    canid_whitelist[0x382] = 1;
-    canid_whitelist[0x383] = 1;
-    canid_whitelist[0x38a] = 1;
-    canid_whitelist[0x38b] = 1;
-    canid_whitelist[0x394] = 1;
-    canid_whitelist[0x399] = 1;
-    canid_whitelist[0x39b] = 1;
-    canid_whitelist[0x3a0] = 1;
-    canid_whitelist[0x3a1] = 1;
-    canid_whitelist[0x3b0] = 1;
-    canid_whitelist[0x3b1] = 1;
-    canid_whitelist[0x3b6] = 1;
-    canid_whitelist[0x3b7] = 1;
-    canid_whitelist[0x3b9] = 1;
-    canid_whitelist[0x3bb] = 1;
-    canid_whitelist[0x3bc] = 1;
-    canid_whitelist[0x3d3] = 1;
-    canid_whitelist[0x3f9] = 1;
-    canid_whitelist[0x420] = 1;
-    canid_whitelist[0x421] = 1;
-    canid_whitelist[0x423] = 1;
-    canid_whitelist[0x440] = 1;
-    canid_whitelist[0x442] = 1;
-    canid_whitelist[0x44d] = 1;
-    canid_whitelist[0x45c] = 1;
-    canid_whitelist[0x498] = 1;
-    canid_whitelist[0x499] = 1;
-    canid_whitelist[0x49a] = 1;
-    canid_whitelist[0x49b] = 1;
-    canid_whitelist[0x49c] = 1;
-    canid_whitelist[0x49d] = 1;
-    canid_whitelist[0x4a0] = 1;
-    canid_whitelist[0x4a1] = 1;
-    canid_whitelist[0x4a2] = 1;
-    canid_whitelist[0x4a6] = 1;
-    canid_whitelist[0x4a7] = 1;
-    canid_whitelist[0x4a8] = 1;
-    canid_whitelist[0x4ac] = 1;
-    canid_whitelist[0x4ad] = 1;
-    canid_whitelist[0x4ae] = 1;
-    canid_whitelist[0x4af] = 1;
-    canid_whitelist[0x4c1] = 1;
-    canid_whitelist[0x4c3] = 1;
-    canid_whitelist[0x4c6] = 1;
-    canid_whitelist[0x4c8] = 1;
-    canid_whitelist[0x4dc] = 1;
-    canid_whitelist[0x4dd] = 1;
-    canid_whitelist[0x610] = 1;
-    canid_whitelist[0x611] = 1;
-    canid_whitelist[0x612] = 1;
-    canid_whitelist[0x614] = 1;
-    canid_whitelist[0x620] = 1;
-    canid_whitelist[0x621] = 1;
-    canid_whitelist[0x622] = 1;
-    canid_whitelist[0x623] = 1;
-    canid_whitelist[0x624] = 1;
-    canid_whitelist[0x626] = 1;
-    canid_whitelist[0x630] = 1;
-    canid_whitelist[0x632] = 1;
-    canid_whitelist[0x633] = 1;
-    canid_whitelist[0x635] = 1;
-    canid_whitelist[0x638] = 1;
-    canid_whitelist[0x63c] = 1;
-    canid_whitelist[0x63d] = 1;
-    canid_whitelist[0x640] = 1;
-    canid_whitelist[0x680] = 1;
-    canid_whitelist[0x6c0] = 1;
-    canid_whitelist[0x6e1] = 1;
-    canid_whitelist[0x6e2] = 1;
-    canid_whitelist[0xaa] = 1;
-    canid_whitelist[0xb4] = 1;
-    sys_getpid = syscall_table[__NR_getpid];
+        canid_whitelist[0x127] = 1;
+        canid_whitelist[0x1c4] = 1;
+        canid_whitelist[0x20] = 1;
+        canid_whitelist[0x224] = 1;
+        canid_whitelist[0x230] = 1;
+        canid_whitelist[0x24] = 1;
+        canid_whitelist[0x245] = 1;
+        canid_whitelist[0x247] = 1;
+        canid_whitelist[0x25] = 1;
+        canid_whitelist[0x260] = 1;
+        canid_whitelist[0x2a4] = 1;
+        canid_whitelist[0x320] = 1;
+        canid_whitelist[0x353] = 1;
+        canid_whitelist[0x361] = 1;
+        canid_whitelist[0x380] = 1;
+        canid_whitelist[0x381] = 1;
+        canid_whitelist[0x382] = 1;
+        canid_whitelist[0x383] = 1;
+        canid_whitelist[0x38a] = 1;
+        canid_whitelist[0x38b] = 1;
+        canid_whitelist[0x394] = 1;
+        canid_whitelist[0x399] = 1;
+        canid_whitelist[0x39b] = 1;
+        canid_whitelist[0x3a0] = 1;
+        canid_whitelist[0x3a1] = 1;
+        canid_whitelist[0x3b0] = 1;
+        canid_whitelist[0x3b1] = 1;
+        canid_whitelist[0x3b6] = 1;
+        canid_whitelist[0x3b7] = 1;
+        canid_whitelist[0x3b9] = 1;
+        canid_whitelist[0x3bb] = 1;
+        canid_whitelist[0x3bc] = 1;
+        canid_whitelist[0x3d3] = 1;
+        canid_whitelist[0x3f9] = 1;
+        canid_whitelist[0x420] = 1;
+        canid_whitelist[0x421] = 1;
+        canid_whitelist[0x423] = 1;
+        canid_whitelist[0x440] = 1;
+        canid_whitelist[0x442] = 1;
+        canid_whitelist[0x44d] = 1;
+        canid_whitelist[0x45c] = 1;
+        canid_whitelist[0x498] = 1;
+        canid_whitelist[0x499] = 1;
+        canid_whitelist[0x49a] = 1;
+        canid_whitelist[0x49b] = 1;
+        canid_whitelist[0x49c] = 1;
+        canid_whitelist[0x49d] = 1;
+        canid_whitelist[0x4a0] = 1;
+        canid_whitelist[0x4a1] = 1;
+        canid_whitelist[0x4a2] = 1;
+        canid_whitelist[0x4a6] = 1;
+        canid_whitelist[0x4a7] = 1;
+        canid_whitelist[0x4a8] = 1;
+        canid_whitelist[0x4ac] = 1;
+        canid_whitelist[0x4ad] = 1;
+        canid_whitelist[0x4ae] = 1;
+        canid_whitelist[0x4af] = 1;
+        canid_whitelist[0x4c1] = 1;
+        canid_whitelist[0x4c3] = 1;
+        canid_whitelist[0x4c6] = 1;
+        canid_whitelist[0x4c8] = 1;
+        canid_whitelist[0x4dc] = 1;
+        canid_whitelist[0x4dd] = 1;
+        canid_whitelist[0x610] = 1;
+        canid_whitelist[0x611] = 1;
+        canid_whitelist[0x612] = 1;
+        canid_whitelist[0x614] = 1;
+        canid_whitelist[0x620] = 1;
+        canid_whitelist[0x621] = 1;
+        canid_whitelist[0x622] = 1;
+        canid_whitelist[0x623] = 1;
+        canid_whitelist[0x624] = 1;
+        canid_whitelist[0x626] = 1;
+        canid_whitelist[0x630] = 1;
+        canid_whitelist[0x632] = 1;
+        canid_whitelist[0x633] = 1;
+        canid_whitelist[0x635] = 1;
+        canid_whitelist[0x638] = 1;
+        canid_whitelist[0x63c] = 1;
+        canid_whitelist[0x63d] = 1;
+        canid_whitelist[0x640] = 1;
+        canid_whitelist[0x680] = 1;
+        canid_whitelist[0x6c0] = 1;
+        canid_whitelist[0x6e1] = 1;
+        canid_whitelist[0x6e2] = 1;
+        canid_whitelist[0xaa] = 1;
+        canid_whitelist[0xb4] = 1;
+        sys_getpid = syscall_table[__NR_getpid];
 
 	clk = devm_clk_get_optional(&spi->dev, NULL);
 	if (IS_ERR(clk))
