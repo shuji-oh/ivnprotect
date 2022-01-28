@@ -55,7 +55,6 @@ enum can_mode {
 struct can_priv {
 	struct net_device *dev;
 	struct can_device_stats can_stats;
-	struct can_device_sec_stats can_sec_stats; //IVNProtect
 
 	struct can_bittiming bittiming, data_bittiming;
 	const struct can_bittiming_const *bittiming_const,
@@ -71,7 +70,6 @@ struct can_priv {
 	struct can_clock clock;
 
 	enum can_state state;
-	enum can_sec_state sec_state; // IVNProtect
 
 	/* CAN controller features - see include/uapi/linux/can/netlink.h */
 	u32 ctrlmode;		/* current options setting */
@@ -101,6 +99,8 @@ struct can_priv {
 	struct led_trigger *rxtx_led_trig;
 	char rxtx_led_trig_name[CAN_LED_NAME_SZ];
 #endif
+	enum can_sec_state sec_state; // IVNProtect
+	struct can_device_sec_stats can_sec_stats; //IVNProtect
 };
 
 #define CAN_SYNC_SEG 1
