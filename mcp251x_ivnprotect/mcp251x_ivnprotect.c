@@ -1059,7 +1059,7 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
                         arrival_nstime = (current_ns - prev_ns);
                         if (arrival_nstime < DOS_THRESHOLD) {
                                 //attacker_pid = sys_getpid(); // in case of malicious arrival time, the interface will preserve an attacker process pid.
-                                mdelay(5); // rate limiting 
+                                mdelay(3); // rate limiting 
                                 mcp251x_hw_tx(spi, frame, 0);
                                 priv->tx_len = 1 + frame->can_dlc;
                                 can_put_echo_skb(priv->tx_skb, net, 0);
