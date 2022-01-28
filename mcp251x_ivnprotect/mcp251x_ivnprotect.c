@@ -1063,7 +1063,6 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
                         current_ns = ktime_get_clocktai_ns();
                         arrival_nstime = (current_ns - prev_ns);
                         if (arrival_nstime < DOS_THRESHOLD) {
-                                //attacker_pid = sys_getpid(); // in case of malicious arrival time, the interface will preserve an attacker process pid.
                                 priv->can.can_sec_stats.error_rate_limiting++;
                                 mdelay(5); // rate limiting
                                 printk(KERN_NOTICE "[IVNProtect] LOG:Rate_limiting");
@@ -1128,7 +1127,6 @@ static irqreturn_t mcp251x_can_ist(int irq, void *dev_id)
 	mutex_lock(&priv->mcp_lock);
 	while (!priv->force_quit) {
 		enum can_state new_state;
-		enum can_sec_state new_sec_state;
 		u8 intf, eflag;
 		u8 clear_intf = 0;
 		int can_id = 0, data1 = 0;
@@ -1191,8 +1189,7 @@ static irqreturn_t mcp251x_can_ist(int irq, void *dev_id)
 		}
                 
 		/* Update can security state */
-                if (priv->can.can_sec_stats.error_rate_limiting >= 256) new_sec_state = CAN_STATE_SEC_BUS_OFF;
-		priv->can.sec_state = new_sec_state;
+                if (priv->can.can_sec_stats.error_rate_limiting >= 256) priv->can.sec_state = CAN_STATE_SEC_BUS_OFF;
                 
 
 		/* Update can state statistics */
