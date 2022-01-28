@@ -277,7 +277,7 @@ MCP251X_IS(2510);
 #define AUTHORIZED_USER 1000
 u64 current_ns, prev_ns;
 static int canid_whitelist[2048];
-static int attacker_pid;
+//static int attacker_pid;
 static uid_t benign_uid;
 static void **syscall_table = (void *)0x80100204; // sudo cat /proc/kallsyms | grep sys_call_table
 asmlinkage long (*sys_getpid)(void);
@@ -1037,17 +1037,12 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 
 	mutex_lock(&priv->mcp_lock);
         if (canid_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be bus-off and preserve an attacker process pid.
-                attacker_pid = sys_getpid();
+                //attacker_pid = sys_getpid();
                 priv->can.state = CAN_STATE_BUS_OFF;
-                printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition1", attacker_pid);
-        } else {
-                if (attacker_pid  == sys_getpid()) { // in case of the attacker process, the interface will be bus-off state.
-                        priv->can.state = CAN_STATE_BUS_OFF;
-                        printk(KERN_NOTICE "[IVNProtect] PID:%d LOG:Bus-off_state_transition2", attacker_pid);
-                } else { // in case of neither malicious ID nor the malicious process, the interface recovers from bus-off state.
-                        priv->can.state = CAN_STATE_ERROR_ACTIVE;
-                        printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Bus-off_state_recover", sys_getpid());
-                }
+                printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Bus-off_state_transition1", sys_getpid());
+        } else if (priv->can.state != CAN_STATE_ERROR_ACTIVE) { // in case of benign ID, the interface recovers from bus-off state.
+                priv->can.state = CAN_STATE_ERROR_ACTIVE;
+                printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Bus-off_state_recover", sys_getpid());
         }
 	if (priv->tx_skb) {
 		if (priv->can.state == CAN_STATE_BUS_OFF) {
