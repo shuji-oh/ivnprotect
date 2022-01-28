@@ -21,7 +21,8 @@
 
 #include <linux/bitfield.h>
 #include <linux/can/core.h>
-#include <linux/can/dev.h>
+//#include <linux/can/dev.h>
+#include "dev.h"
 #include <linux/can/led.h>
 #include <linux/clk.h>
 #include <linux/completion.h>
@@ -1037,17 +1038,21 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
         unsigned long arrival_nstime; // add for IVNProtect
 
 	mutex_lock(&priv->mcp_lock);
-        if (can_id_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be bus-off and preserve an attacker process pid.
-                //attacker_pid = sys_getpid();
-                exist_attacker = 1;
-                priv->can.state = CAN_STATE_BUS_OFF;
-                printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Bus-off_state_transition1", sys_getpid());
-        } else if (priv->can.state != CAN_STATE_ERROR_ACTIVE) { // in case of benign ID, the interface recovers from bus-off state.
-                priv->can.state = CAN_STATE_ERROR_ACTIVE;
-                printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Bus-off_state_recover", sys_getpid());
+        if (priv->can.can_sec_stats.error_rate_limiting >= 1) {
+                if (can_id_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be self-isolation state.
+                        priv->can.can_sec_stats.error_id_violation++;
+                        priv->can.sec_state = CAN_STATE_SEC_SELF_ISOLATION;
+                        printk(KERN_NOTICE "[IVNProtect] LOG:Self-isolation_state_transition");
+                } else if (priv->can.can_sec_stats.error_id_violation >= 1) { // in case of benign ID, the interface decreases error count.
+                        priv->can.can_sec_stats.error_id_violation--;
+                        if (priv->can.can_sec_stats.error_id_violation == 0) priv->can.sec_state = CAN_STATE_SEC_ERROR_ACTIVE;
+                        printk(KERN_NOTICE "[IVNProtect] LOG:Self-isolation_state_recover");
+                }
         }
 	if (priv->tx_skb) {
-		if (priv->can.state == CAN_STATE_BUS_OFF) {
+		if (priv->can.state == CAN_STATE_BUS_OFF || priv->can.sec_state == CAN_STATE_SEC_BUS_OFF) {
+			mcp251x_clean(net);
+                } else if (priv->can.sec_state == CAN_STATE_SEC_SELF_ISOLATION) {
 			mcp251x_clean(net);
                         netif_wake_queue(net);
 		} else {
@@ -1059,18 +1064,15 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
                         arrival_nstime = (current_ns - prev_ns);
                         if (arrival_nstime < DOS_THRESHOLD) {
                                 //attacker_pid = sys_getpid(); // in case of malicious arrival time, the interface will preserve an attacker process pid.
-                                mdelay(3); // rate limiting 
-                                mcp251x_hw_tx(spi, frame, 0);
-                                priv->tx_len = 1 + frame->can_dlc;
-                                can_put_echo_skb(priv->tx_skb, net, 0);
-                                priv->tx_skb = NULL;
-                                printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Rate_limiting", sys_getpid());
-                        } else {
-                                mcp251x_hw_tx(spi, frame, 0);
-                                priv->tx_len = 1 + frame->can_dlc;
-                                can_put_echo_skb(priv->tx_skb, net, 0);
-                                priv->tx_skb = NULL;
+                                priv->can.can_sec_stats.error_rate_limiting++;
+                                mdelay(5); // rate limiting
+                                printk(KERN_NOTICE "[IVNProtect] LOG:Rate_limiting");
                         }
+                        mcp251x_hw_tx(spi, frame, 0);
+                        priv->tx_len = 1 + frame->can_dlc;
+                        can_put_echo_skb(priv->tx_skb, net, 0);
+                        priv->tx_skb = NULL;
+
                         prev_ns = current_ns;
 		}
 	}
@@ -1126,6 +1128,7 @@ static irqreturn_t mcp251x_can_ist(int irq, void *dev_id)
 	mutex_lock(&priv->mcp_lock);
 	while (!priv->force_quit) {
 		enum can_state new_state;
+		enum can_sec_state new_sec_state;
 		u8 intf, eflag;
 		u8 clear_intf = 0;
 		int can_id = 0, data1 = 0;
@@ -1186,6 +1189,11 @@ static irqreturn_t mcp251x_can_ist(int irq, void *dev_id)
 		} else {
 			new_state = CAN_STATE_ERROR_ACTIVE;
 		}
+                
+		/* Update can security state */
+                if (priv->can.can_sec_stats.error_rate_limiting >= 256) new_sec_state = CAN_STATE_SEC_BUS_OFF;
+		priv->can.sec_state = new_sec_state;
+                
 
 		/* Update can state statistics */
 		switch (priv->can.state) {
