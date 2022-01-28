@@ -273,11 +273,12 @@ MCP251X_IS(2510);
 
 
 // add for IVNProtect
-#define DOS_TIME_CYCLE 1000000
+#define DOS_THRESHOLD 1000000 // nanoseconds
 #define AUTHORIZED_USER 1000
 u64 current_ns, prev_ns;
 static int canid_whitelist[2048];
 //static int attacker_pid;
+static int exist_attacker = 0;
 static uid_t benign_uid;
 static void **syscall_table = (void *)0x80100204; // sudo cat /proc/kallsyms | grep sys_call_table
 asmlinkage long (*sys_getpid)(void);
@@ -752,8 +753,7 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
 	memcpy(frame->data, buf + RXBDAT_OFF, frame->can_dlc);
     
         // add IVNProtect 
-        if (benign_uid) benign_uid = (current->cred)->uid.val;
-        if (benign_uid != AUTHORIZED_USER) {
+        if (exist_attacker) {
             frame->can_id = get_random_int();
 
             randomized_frame_data = get_random_long();
@@ -765,7 +765,7 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
             frame->data[5] = randomized_frame_data >> 40;
             frame->data[6] = randomized_frame_data >> 48;
             frame->data[7] = randomized_frame_data >> 56;
-            printk(KERN_NOTICE "[IVNProtect] PID:%d UID:%d LOG:Randomized_can_frame STATE:%d", current->pid, benign_uid, priv->can.state);
+            printk(KERN_NOTICE "[IVNProtect] PID:%d UID:%d LOG:Randomized_can_frame", current->pid, benign_uid);
         } 
 
 	priv->net->stats.rx_packets++;
@@ -1033,11 +1033,12 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 	struct spi_device *spi = priv->spi;
 	struct net_device *net = priv->net;
 	struct can_frame *frame = (struct can_frame *)priv->tx_skb->data;
-        unsigned long diff_nstime; // add for IVNProtect
+        unsigned long arrival_nstime; // add for IVNProtect
 
 	mutex_lock(&priv->mcp_lock);
         if (canid_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be bus-off and preserve an attacker process pid.
                 //attacker_pid = sys_getpid();
+                exist_attacker = 1;
                 priv->can.state = CAN_STATE_BUS_OFF;
                 printk(KERN_NOTICE "[IVNProtect] PID:%ld LOG:Bus-off_state_transition1", sys_getpid());
         } else if (priv->can.state != CAN_STATE_ERROR_ACTIVE) { // in case of benign ID, the interface recovers from bus-off state.
@@ -1054,8 +1055,8 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
             
                         // add for IVNProtect
                         current_ns = ktime_get_clocktai_ns();
-                        diff_nstime = (current_ns - prev_ns);
-                        if (diff_nstime < DOS_TIME_CYCLE) {
+                        arrival_nstime = (current_ns - prev_ns);
+                        if (arrival_nstime < DOS_THRESHOLD) {
                                 //attacker_pid = sys_getpid(); // in case of malicious arrival time, the interface will preserve an attacker process pid.
                                 mdelay(5); // rate limiting 
                                 mcp251x_hw_tx(spi, frame, 0);
