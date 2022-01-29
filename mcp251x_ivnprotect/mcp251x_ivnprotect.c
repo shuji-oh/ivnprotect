@@ -274,7 +274,7 @@ MCP251X_IS(2510);
 
 
 // add for IVNProtect
-#define DOS_THRESHOLD 400000 // nanoseconds
+#define DOS_THRESHOLD 1000000 // nanoseconds
 #define RATE_LIMITING_TIME 5 // miliseconds for sleeping time against DoS
 #define RECOVERY_RATE 100 // Recover sec error counter every RECOVERY_RATE benign sending
 u64 current_ns, prev_ns = 0;
@@ -1071,7 +1071,7 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 				frame->can_dlc = CAN_FRAME_MAX_DATA_LEN;
             
                         // add for IVNProtect
-                        if (priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE)
+                        if (arrival_nstime < DOS_THRESHOLD && priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE)
                                 mdelay(RATE_LIMITING_TIME); // rate limiting
                         mcp251x_hw_tx(spi, frame, 0);
                         priv->tx_len = 1 + frame->can_dlc;
