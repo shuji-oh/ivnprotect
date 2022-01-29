@@ -1045,7 +1045,8 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
         arrival_nstime = (current_ns - prev_ns);
         if (can_id_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be self-isolation state.
                 priv->can.can_sec_stats.error_id_violation++;
-                priv->can.sec_state = CAN_STATE_SEC_SELF_ISOLATION;
+                if (priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE)
+                        priv->can.sec_state = CAN_STATE_SEC_SELF_ISOLATION;
                 printk(KERN_NOTICE "[IVNProtect] LOG:ID_violation");
         } else if (arrival_nstime < DOS_THRESHOLD) {
                 priv->can.can_sec_stats.error_rate_limiting++;
