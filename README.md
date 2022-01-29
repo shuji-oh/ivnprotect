@@ -36,10 +36,10 @@ $ sudo apt install git bc bison flex libssl-dev python2 libncurses5-dev
 $ sudo wget https://raw.githubusercontent.com/RPi-Distro/rpi-source/master/rpi-source -O /usr/local/bin/rpi-source && sudo chmod +x /usr/local/bin/rpi-source && /usr/local/bin/rpi-source -q --tag-update  
   
 $ git clone https://github.com/shuji-oh/ivnprotect  
-$ cd ivnprotect/mcp251x-ivnprotect  
+$ cd ivnprotect/mcp251x_ivnprotect  
 $ make  
 $ sudo rmmod mcp251x  
-$ sudo insmod mcp251x-ivnprotect.ko  
+$ sudo insmod mcp251x_ivnprotect.ko  
 ```
 
 ### Enable PiCAN board
