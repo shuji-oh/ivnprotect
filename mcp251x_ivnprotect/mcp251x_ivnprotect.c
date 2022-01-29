@@ -274,9 +274,9 @@ MCP251X_IS(2510);
 
 
 // add for IVNProtect
-#define DOS_THRESHOLD 1000000 // nanoseconds
-#define RATE_LIMITING_TIME 5 // miliseconds for sleeping time against DoS
-#define RECOVERY_RATE 100 // Recover sec error counter every RECOVERY_RATE benign sending
+#define DOS_THRESHOLD 450000 // nanoseconds
+#define RATE_LIMITING_TIME 10 // miliseconds for sleeping time against DoS
+#define RECOVERY_RATE 50 // Recover sec error counter every RECOVERY_RATE benign sending
 u64 current_ns, prev_ns = 0;
 static int can_id_whitelist[2048];
 static unsigned int send_success_cnt = 0;
