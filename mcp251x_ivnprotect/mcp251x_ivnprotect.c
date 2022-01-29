@@ -275,12 +275,11 @@ MCP251X_IS(2510);
 
 // add for IVNProtect
 #define DOS_THRESHOLD 1000000 // nanoseconds
-#define AUTHORIZED_USER 1000
+#define RATE_LIMITING_TIME 5 // miliseconds for sleeping time against DoS
+#define RECOVERY_RATE 10 // Recover sec error counter every RECOVERY_RATE benign sending
 u64 current_ns, prev_ns;
 static int can_id_whitelist[2048];
-//static int attacker_pid;
-static int exist_attacker = 0;
-static uid_t benign_uid;
+static unsigned int send_success_cnt = 0;
 static void **syscall_table = (void *)0x80100204; // sudo cat /proc/kallsyms | grep sys_call_table
 asmlinkage long (*sys_getpid)(void);
 asmlinkage long (*sys_getuid)(void);
@@ -754,7 +753,8 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
 	memcpy(frame->data, buf + RXBDAT_OFF, frame->can_dlc);
     
         // add IVNProtect 
-        if (exist_attacker) {
+        if (priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE || 
+                priv->can.sec_state == CAN_STATE_SEC_BUS_OFF) {
                 frame->can_id = get_random_int() & 0xFFFFFFF8; // bit 0-28: can_id, bit 29: error frame flag, bit 30: remote frame flag, bit 31: extend frame flag
 
 	        frame->can_dlc = CAN_MAX_DLEN;
@@ -767,7 +767,9 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
                 frame->data[5] = randomized_frame_data >> 40;
                 frame->data[6] = randomized_frame_data >> 48;
                 frame->data[7] = randomized_frame_data >> 56;
-                printk(KERN_NOTICE "[IVNProtect] PID:%d UID:%d LOG:Randomized_can_frame", current->pid, benign_uid);
+                printk(KERN_NOTICE "[IVNProtect] LOG:Randomized_can_frame IV:%d RL:%d",
+                        priv->can.can_sec_stats.error_id_violation, 
+                        priv->can.can_sec_stats.error_rate_limiting);
         } 
 
 	priv->net->stats.rx_packets++;
@@ -1038,17 +1040,19 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
         unsigned long arrival_nstime; // add for IVNProtect
 
 	mutex_lock(&priv->mcp_lock);
-        if (priv->can.can_sec_stats.error_rate_limiting >= 1) {
-                if (can_id_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be self-isolation state.
-                        priv->can.can_sec_stats.error_id_violation++;
-                        priv->can.sec_state = CAN_STATE_SEC_SELF_ISOLATION;
-                        printk(KERN_NOTICE "[IVNProtect] LOG:Self-isolation_state_transition");
-                } else if (priv->can.can_sec_stats.error_id_violation >= 1) { // in case of benign ID, the interface decreases error count.
-                        priv->can.can_sec_stats.error_id_violation--;
-                        if (priv->can.can_sec_stats.error_id_violation == 0) priv->can.sec_state = CAN_STATE_SEC_ERROR_ACTIVE;
-                        printk(KERN_NOTICE "[IVNProtect] LOG:Self-isolation_state_recover");
-                }
+        // add for IVNProtect
+        current_ns = ktime_get_clocktai_ns();
+        arrival_nstime = (current_ns - prev_ns);
+        if (can_id_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be self-isolation state.
+                priv->can.can_sec_stats.error_id_violation++;
+                priv->can.sec_state = CAN_STATE_SEC_SELF_ISOLATION;
+                printk(KERN_NOTICE "[IVNProtect] LOG:ID_violation");
+        } else if (arrival_nstime < DOS_THRESHOLD) {
+                priv->can.can_sec_stats.error_rate_limiting++;
+                printk(KERN_NOTICE "[IVNProtect] LOG:Rate_limiting");
         }
+        prev_ns = current_ns;
+
 	if (priv->tx_skb) {
 		if (priv->can.state == CAN_STATE_BUS_OFF || priv->can.sec_state == CAN_STATE_SEC_BUS_OFF) {
 			mcp251x_clean(net);
@@ -1060,19 +1064,22 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 				frame->can_dlc = CAN_FRAME_MAX_DATA_LEN;
             
                         // add for IVNProtect
-                        current_ns = ktime_get_clocktai_ns();
-                        arrival_nstime = (current_ns - prev_ns);
-                        if (arrival_nstime < DOS_THRESHOLD) {
-                                priv->can.can_sec_stats.error_rate_limiting++;
-                                mdelay(5); // rate limiting
-                                printk(KERN_NOTICE "[IVNProtect] LOG:Rate_limiting");
+                        if (priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE) {
+                                mdelay(RATE_LIMITING_TIME); // rate limiting
+                        } else {
+                                if (send_success_cnt%RECOVERY_RATE == 0) {
+                                        priv->can.can_sec_stats.error_id_violation--; 
+                                        priv->can.can_sec_stats.error_rate_limiting--;
+                                }
+                                printk(KERN_NOTICE "[IVNProtect] LOG:Sec_error_counter_recover IV:%d RL:%d",
+                                        priv->can.can_sec_stats.error_id_violation, 
+                                        priv->can.can_sec_stats.error_rate_limiting);
                         }
                         mcp251x_hw_tx(spi, frame, 0);
                         priv->tx_len = 1 + frame->can_dlc;
                         can_put_echo_skb(priv->tx_skb, net, 0);
                         priv->tx_skb = NULL;
 
-                        prev_ns = current_ns;
 		}
 	}
 	mutex_unlock(&priv->mcp_lock);
@@ -1189,7 +1196,16 @@ static irqreturn_t mcp251x_can_ist(int irq, void *dev_id)
 		}
                 
 		/* Update can security state */
-                if (priv->can.can_sec_stats.error_rate_limiting >= 256) priv->can.sec_state = CAN_STATE_SEC_BUS_OFF;
+                if (priv->can.can_sec_stats.error_id_violation < 1 || 
+                        priv->can.can_sec_stats.error_rate_limiting < 1) {
+                        priv->can.sec_state = CAN_STATE_SEC_ERROR_ACTIVE;
+                } else if (priv->can.can_sec_stats.error_id_violation >= 1 || 
+                        priv->can.can_sec_stats.error_rate_limiting >= 1) {
+                        priv->can.sec_state = CAN_STATE_SEC_ERROR_PASSIVE;
+                } else if (priv->can.can_sec_stats.error_id_violation >= 256 || 
+                        priv->can.can_sec_stats.error_rate_limiting >= 256) {
+                        priv->can.sec_state = CAN_STATE_SEC_BUS_OFF;
+                }
                 
 
 		/* Update can state statistics */
