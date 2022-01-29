@@ -274,9 +274,9 @@ MCP251X_IS(2510);
 
 
 // add for IVNProtect
-#define DOS_THRESHOLD 1000000 // nanoseconds
+#define DOS_THRESHOLD 400000 // nanoseconds
 #define RATE_LIMITING_TIME 5 // miliseconds for sleeping time against DoS
-#define RECOVERY_RATE 10 // Recover sec error counter every RECOVERY_RATE benign sending
+#define RECOVERY_RATE 100 // Recover sec error counter every RECOVERY_RATE benign sending
 u64 current_ns, prev_ns = 0;
 static int can_id_whitelist[2048];
 static unsigned int send_success_cnt = 0;
@@ -1051,7 +1051,7 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
                 priv->can.can_sec_stats.error_rate_limiting++;
                 printk(KERN_NOTICE "[IVNProtect] LOG:Rate_limiting");
         } else {
-                if (send_success_cnt%RECOVERY_RATE == 0) {
+                if (send_success_cnt++%RECOVERY_RATE == 0) {
                         priv->can.can_sec_stats.error_id_violation = priv->can.can_sec_stats.error_id_violation <= 0 ? 0 : priv->can.can_sec_stats.error_id_violation - 1; 
                         priv->can.can_sec_stats.error_rate_limiting = priv->can.can_sec_stats.error_rate_limiting <= 0 ? 0 : priv->can.can_sec_stats.error_rate_limiting - 1;
                 }
@@ -1071,9 +1071,8 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 				frame->can_dlc = CAN_FRAME_MAX_DATA_LEN;
             
                         // add for IVNProtect
-                        if (priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE) {
+                        if (priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE)
                                 mdelay(RATE_LIMITING_TIME); // rate limiting
-                        }
                         mcp251x_hw_tx(spi, frame, 0);
                         priv->tx_len = 1 + frame->can_dlc;
                         can_put_echo_skb(priv->tx_skb, net, 0);
