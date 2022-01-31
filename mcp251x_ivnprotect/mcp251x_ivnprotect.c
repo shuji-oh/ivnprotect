@@ -767,9 +767,11 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
                 frame->data[5] = randomized_frame_data >> 40;
                 frame->data[6] = randomized_frame_data >> 48;
                 frame->data[7] = randomized_frame_data >> 56;
+#ifdef DEBUG
                 printk(KERN_NOTICE "[IVNProtect] LOG:Randomized_can_frame IV:%d RL:%d",
                         priv->can.can_sec_stats.error_id_violation, 
                         priv->can.can_sec_stats.error_rate_limiting);
+#endif
         } 
 
 	priv->net->stats.rx_packets++;
@@ -1047,18 +1049,24 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
                 priv->can.can_sec_stats.error_id_violation++;
                 if (priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE)
                         priv->can.sec_state = CAN_STATE_SEC_SELF_ISOLATION;
+#ifdef DEBUG
                 printk(KERN_NOTICE "[IVNProtect] LOG:ID_violation");
+#endif
         } else if (arrival_nstime < DOS_THRESHOLD) {
                 priv->can.can_sec_stats.error_rate_limiting++;
+#ifdef DEBUG
                 printk(KERN_NOTICE "[IVNProtect] LOG:Rate_limiting");
+#endif
         } else {
                 if (send_success_cnt++%RECOVERY_RATE == 0) {
                         priv->can.can_sec_stats.error_id_violation = priv->can.can_sec_stats.error_id_violation <= 0 ? 0 : priv->can.can_sec_stats.error_id_violation - 1; 
                         priv->can.can_sec_stats.error_rate_limiting = priv->can.can_sec_stats.error_rate_limiting <= 0 ? 0 : priv->can.can_sec_stats.error_rate_limiting - 1;
                 }
+#ifdef DEBUG
                 printk(KERN_NOTICE "[IVNProtect] LOG:Sec_error_counter_recover IV:%d RL:%d",
                         priv->can.can_sec_stats.error_id_violation, 
                         priv->can.can_sec_stats.error_rate_limiting);
+#endif
         }
 
 	if (priv->tx_skb) {
