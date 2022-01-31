@@ -283,6 +283,9 @@ static unsigned int send_success_cnt = 0;
 static void **syscall_table = (void *)0x80100204; // sudo cat /proc/kallsyms | grep sys_call_table
 asmlinkage long (*sys_getpid)(void);
 asmlinkage long (*sys_getuid)(void);
+#ifdef EVAL_IT
+u64 eval_start_ns, eval_end_ns = 0;
+#endif
 
 static void mcp251x_clean(struct net_device *net)
 {
@@ -1052,10 +1055,16 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 #ifdef DEBUG
                 printk(KERN_NOTICE "[IVNProtect] LOG:ID_violation");
 #endif
+#ifdef EVAL_IT
+                eval_start_ns = ktime_get_clocktai_ns();
+#endif
         } else if (arrival_nstime < DOS_THRESHOLD) {
                 priv->can.can_sec_stats.error_rate_limiting++;
 #ifdef DEBUG
                 printk(KERN_NOTICE "[IVNProtect] LOG:Rate_limiting");
+#endif
+#ifdef EVAL_IT
+                eval_start_ns = ktime_get_clocktai_ns();
 #endif
         } else {
                 if (send_success_cnt++%RECOVERY_RATE == 0) {
@@ -1206,6 +1215,10 @@ static irqreturn_t mcp251x_can_ist(int irq, void *dev_id)
 		/* Update can security state */
                 if (priv->can.can_sec_stats.error_id_violation >= 256 || 
                         priv->can.can_sec_stats.error_rate_limiting >= 256) {
+#ifdef EVAL_IT
+                        eval_end_ns = ktime_get_clocktai_ns();
+                        printk(KERN_NOTICE "[IVNProtect] LOG:Evaluation IT:%lld[ns]", eval_end_ns-eval_start_ns);
+#endif
                         priv->can.sec_state = CAN_STATE_SEC_BUS_OFF;
                 }  else if (priv->can.can_sec_stats.error_id_violation >= 1 || 
                         priv->can.can_sec_stats.error_rate_limiting >= 1) {
