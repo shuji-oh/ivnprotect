@@ -57,3 +57,12 @@ The default tx queue length is 10. So, we need to increase the length to 10000 (
 ```
 $ sudo ifconfig can0 txqueuelen 10000  
 ```
+
+### Build our kernel module for debugging
+```
+$ cd ivnprotect/mcp251x_ivnprotect  
+$ make debug  
+$ sudo rmmod mcp251x  
+$ sudo insmod mcp251x_ivnprotect.ko  
+```
+
