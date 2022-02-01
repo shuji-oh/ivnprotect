@@ -1084,6 +1084,7 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
                 } else if (priv->can.sec_state == CAN_STATE_SEC_SELF_ISOLATION) {
 			mcp251x_clean(net);
                         netif_wake_queue(net);
+                        priv->can.sec_state = CAN_STATE_SEC_ERROR_PASSIVE;
 		} else {
 			if (frame->can_dlc > CAN_FRAME_MAX_DATA_LEN)
 				frame->can_dlc = CAN_FRAME_MAX_DATA_LEN;
