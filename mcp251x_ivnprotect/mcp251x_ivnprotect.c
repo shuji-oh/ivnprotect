@@ -1213,8 +1213,8 @@ static irqreturn_t mcp251x_can_ist(int irq, void *dev_id)
 		}
                 
 		/* Update can security state */
-                if (priv->can.can_sec_stats.error_id_violation >= 16 || 
-                        priv->can.can_sec_stats.error_rate_limiting >= 16) {
+                if (priv->can.can_sec_stats.error_id_violation >= 256 || 
+                        priv->can.can_sec_stats.error_rate_limiting >= 256) {
 #ifdef EVAL_IT
                         eval_end_ns = ktime_get_clocktai_ns();
                         printk(KERN_NOTICE "[IVNProtect] LOG:Evaluation IT:%lld[ns]", eval_end_ns-eval_start_ns);
