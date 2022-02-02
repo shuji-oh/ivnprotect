@@ -1048,6 +1048,9 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
         // add for IVNProtect
         current_ns = ktime_get_clocktai_ns();
         arrival_nstime = (current_ns - prev_ns);
+#ifdef DEBUG
+        printk(KERN_NOTICE "[IVNProtect] LOG:Arrival_time AT:%lld-%lld=%ld", current_ns, prev_ns, arrival_nstime);
+#endif
         if (can_id_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be self-isolation state.
                 priv->can.can_sec_stats.error_id_violation++;
                 if (priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE)
