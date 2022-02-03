@@ -286,6 +286,29 @@ asmlinkage long (*sys_getuid)(void);
 #ifdef EVAL_IT
 u64 eval_start_ns, eval_end_ns = 0;
 #endif
+int window_size = 7;
+int ave = 8000;
+int div = 3414;
+int k   = 1;
+int CIDs[2048];
+int compare_set[2048];
+int num_intersection = 0;
+int window_i;
+int simpson;
+
+/* fast DoS detect Sliding Window Similarity */
+int overlap_coefficient(int num_intersection, int window_size)
+{
+        return 1000*((num_intersection*10)/window_size);
+}
+
+int similarity_analysis(int simpson, int k, int div, int ave, int window_size)
+{
+        if ((simpson < (ave - k*div)) || (ave + k*div) < simpson) {
+                return 1;
+        }
+        return 0;
+}
 
 static void mcp251x_clean(struct net_device *net)
 {
@@ -1043,6 +1066,7 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 	struct net_device *net = priv->net;
 	struct can_frame *frame = (struct can_frame *)priv->tx_skb->data;
         unsigned long arrival_nstime; // add for IVNProtect
+        int similarity_alert = 0;
 
 	mutex_lock(&priv->mcp_lock);
         // add for IVNProtect
@@ -1051,6 +1075,22 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 #ifdef DEBUG
         printk(KERN_NOTICE "[IVNProtect] LOG:Arrival_time AT:%lld-%lld=%ld", current_ns, prev_ns, arrival_nstime);
 #endif
+        compare_set[frame->can_id] += 1;
+        if (compare_set[frame->can_id] == CIDs[frame->can_id] || (CIDs[frame->can_id] - compare_set[frame->can_id]) > 0 ) {
+                num_intersection++;
+        }
+        if (++window_i >= window_size) {
+                simpson = overlap_coefficient(num_intersection, window_size);
+                similarity_alert = similarity_analysis(simpson, k, div, ave, window_size);
+#ifdef DEBUG
+                printk(KERN_NOTICE "[IVNProtect] LOG:Similarity_analysis SC:%d", simpson);
+#endif
+                //initialize params
+                num_intersection = 0;
+                window_i = 0;
+                memset(compare_set, 0, sizeof(compare_set));
+        }
+
         if (can_id_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be self-isolation state.
                 priv->can.can_sec_stats.error_id_violation++;
                 if (priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE)
@@ -1068,6 +1108,11 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 #endif
 #ifdef EVAL_IT
                 if (eval_start_ns == 0) eval_start_ns = ktime_get_clocktai_ns();
+#endif
+        } else if (similarity_alert == 1) {
+                priv->can.can_sec_stats.error_similarity++;
+#ifdef DEBUG
+                printk(KERN_NOTICE "[IVNProtect] LOG:Similarity_alert");
 #endif
         } else {
                 if (send_success_cnt++%RECOVERY_RATE == 0) {
@@ -1093,7 +1138,8 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 				frame->can_dlc = CAN_FRAME_MAX_DATA_LEN;
             
                         // add for IVNProtect
-                        if (arrival_nstime < DOS_THRESHOLD && priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE)
+                        if ((arrival_nstime < DOS_THRESHOLD && priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE) ||
+                                (similarity_alert == 1 && priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE))
                                 mdelay(RATE_LIMITING_TIME); // rate limiting
                         mcp251x_hw_tx(spi, frame, 0);
                         priv->tx_len = 1 + frame->can_dlc;
@@ -1218,6 +1264,7 @@ static irqreturn_t mcp251x_can_ist(int irq, void *dev_id)
                 
 		/* Update can security state */
                 if (priv->can.can_sec_stats.error_id_violation >= 256 || 
+                        priv->can.can_sec_stats.error_similarity >= 256 || 
                         priv->can.can_sec_stats.error_rate_limiting >= 256) {
 #ifdef EVAL_IT
                         eval_end_ns = ktime_get_clocktai_ns();
@@ -1228,9 +1275,11 @@ static irqreturn_t mcp251x_can_ist(int irq, void *dev_id)
 #endif
                         priv->can.sec_state = CAN_STATE_SEC_BUS_OFF;
                 }  else if (priv->can.can_sec_stats.error_id_violation >= 1 || 
+                        priv->can.can_sec_stats.error_similarity >= 1 || 
                         priv->can.can_sec_stats.error_rate_limiting >= 1) {
                         priv->can.sec_state = CAN_STATE_SEC_ERROR_PASSIVE;
                 } else if (priv->can.can_sec_stats.error_id_violation < 1 || 
+                        priv->can.can_sec_stats.error_similarity < 1 || 
                         priv->can.can_sec_stats.error_rate_limiting < 1) {
                         priv->can.sec_state = CAN_STATE_SEC_ERROR_ACTIVE;
                 } 
@@ -1501,6 +1550,13 @@ static int mcp251x_can_probe(struct spi_device *spi)
         can_id_whitelist[0x6e2] = 1;
         can_id_whitelist[0xaa] = 1;
         can_id_whitelist[0xb4] = 1;
+
+        CIDs[0x3b8] = 1;
+        CIDs[0x3b9] = 1;
+        CIDs[0x3ba] = 2;
+        CIDs[0x3bc] = 1;
+        CIDs[0x3bd] = 1;
+        CIDs[0x463] = 1;
         sys_getpid = syscall_table[__NR_getpid];
         sys_getuid = syscall_table[__NR_getuid];
 

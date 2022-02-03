@@ -37,6 +37,7 @@ enum can_sec_state {
 struct can_device_sec_stats {
 	__u32 error_id_violation;	/* Changes to self-isolation state */
 	__u32 error_rate_limiting;	/* Changes to security error passive state */
+	__u32 error_similarity;	/* Changes to security error passive state */
 	__u32 bus_off;	        	/* Changes to security bus off state */
 };
 
