@@ -274,7 +274,6 @@ MCP251X_IS(2510);
 
 
 // add for IVNProtect
-#define DOS_THRESHOLD 450000 // nanoseconds
 #define RATE_LIMITING_TIME 10 // miliseconds for sleeping time against DoS
 #define RECOVERY_RATE 50 // Recover sec error counter every RECOVERY_RATE benign sending
 u64 current_ns, prev_ns = 0;
@@ -794,9 +793,9 @@ static void mcp251x_hw_rx(struct spi_device *spi, int buf_idx)
                 frame->data[6] = randomized_frame_data >> 48;
                 frame->data[7] = randomized_frame_data >> 56;
 #ifdef DEBUG
-                printk(KERN_NOTICE "[IVNProtect] LOG:Randomized_can_frame IV:%d RL:%d",
+                printk(KERN_NOTICE "[IVNProtect] LOG:Randomized_can_frame IV:%d SA:%d",
                         priv->can.can_sec_stats.error_id_violation, 
-                        priv->can.can_sec_stats.error_rate_limiting);
+                        priv->can.can_sec_stats.error_similarity_alert);
 #endif
         } 
 
@@ -1065,16 +1064,10 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 	struct spi_device *spi = priv->spi;
 	struct net_device *net = priv->net;
 	struct can_frame *frame = (struct can_frame *)priv->tx_skb->data;
-        unsigned long arrival_nstime; // add for IVNProtect
         int similarity_alert = 0;
 
 	mutex_lock(&priv->mcp_lock);
         // add for IVNProtect
-        current_ns = ktime_get_clocktai_ns();
-        arrival_nstime = (current_ns - prev_ns);
-#ifdef DEBUG
-        printk(KERN_NOTICE "[IVNProtect] LOG:Arrival_time AT:%lld-%lld=%ld", current_ns, prev_ns, arrival_nstime);
-#endif
         compare_set[frame->can_id] += 1;
         if (compare_set[frame->can_id] == CIDs[frame->can_id] || (CIDs[frame->can_id] - compare_set[frame->can_id]) > 0 ) {
                 num_intersection++;
@@ -1101,28 +1094,23 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 #ifdef EVAL_IT
                 if (eval_start_ns == 0) eval_start_ns = ktime_get_clocktai_ns();
 #endif
-        } else if (arrival_nstime < DOS_THRESHOLD) {
-                priv->can.can_sec_stats.error_rate_limiting++;
+        } else if (similarity_alert == 1) {
+                priv->can.can_sec_stats.error_similarity_alert++;
 #ifdef DEBUG
-                printk(KERN_NOTICE "[IVNProtect] LOG:Rate_limiting");
+                printk(KERN_NOTICE "[IVNProtect] LOG:Similarity_alert");
 #endif
 #ifdef EVAL_IT
                 if (eval_start_ns == 0) eval_start_ns = ktime_get_clocktai_ns();
 #endif
-        } else if (similarity_alert == 1) {
-                priv->can.can_sec_stats.error_similarity++;
-#ifdef DEBUG
-                printk(KERN_NOTICE "[IVNProtect] LOG:Similarity_alert");
-#endif
         } else {
                 if (send_success_cnt++%RECOVERY_RATE == 0) {
                         priv->can.can_sec_stats.error_id_violation = priv->can.can_sec_stats.error_id_violation <= 0 ? 0 : priv->can.can_sec_stats.error_id_violation - 1; 
-                        priv->can.can_sec_stats.error_rate_limiting = priv->can.can_sec_stats.error_rate_limiting <= 0 ? 0 : priv->can.can_sec_stats.error_rate_limiting - 1;
+                        priv->can.can_sec_stats.error_similarity_alert = priv->can.can_sec_stats.error_similarity_alert <= 0 ? 0 : priv->can.can_sec_stats.error_similarity_alert - 1;
                 }
 #ifdef DEBUG
-                printk(KERN_NOTICE "[IVNProtect] LOG:Sec_error_counter_recover IV:%d RL:%d",
+                printk(KERN_NOTICE "[IVNProtect] LOG:Sec_error_counter_recover IV:%d SA:%d",
                         priv->can.can_sec_stats.error_id_violation, 
-                        priv->can.can_sec_stats.error_rate_limiting);
+                        priv->can.can_sec_stats.error_similarity_alert);
 #endif
         }
 
@@ -1138,14 +1126,12 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 				frame->can_dlc = CAN_FRAME_MAX_DATA_LEN;
             
                         // add for IVNProtect
-                        if ((arrival_nstime < DOS_THRESHOLD && priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE) ||
-                                (similarity_alert == 1 && priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE))
+                        if (similarity_alert == 1 && priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE)
                                 mdelay(RATE_LIMITING_TIME); // rate limiting
                         mcp251x_hw_tx(spi, frame, 0);
                         priv->tx_len = 1 + frame->can_dlc;
                         can_put_echo_skb(priv->tx_skb, net, 0);
                         priv->tx_skb = NULL;
-                        prev_ns = current_ns;
 
 		}
 	}
@@ -1264,23 +1250,20 @@ static irqreturn_t mcp251x_can_ist(int irq, void *dev_id)
                 
 		/* Update can security state */
                 if (priv->can.can_sec_stats.error_id_violation >= 256 || 
-                        priv->can.can_sec_stats.error_similarity >= 256 || 
-                        priv->can.can_sec_stats.error_rate_limiting >= 256) {
+                        priv->can.can_sec_stats.error_similarity_alert >= 256) {
 #ifdef EVAL_IT
                         eval_end_ns = ktime_get_clocktai_ns();
                         printk(KERN_NOTICE "[IVNProtect] LOG:Evaluation IT:%lld[ns]", eval_end_ns-eval_start_ns);
                         priv->can.can_sec_stats.error_id_violation = 0;
-                        priv->can.can_sec_stats.error_rate_limiting = 0;
+                        priv->can.can_sec_stats.error_similarity_alert = 0;
                         eval_start_ns = 0;
 #endif
                         priv->can.sec_state = CAN_STATE_SEC_BUS_OFF;
                 }  else if (priv->can.can_sec_stats.error_id_violation >= 1 || 
-                        priv->can.can_sec_stats.error_similarity >= 1 || 
-                        priv->can.can_sec_stats.error_rate_limiting >= 1) {
+                        priv->can.can_sec_stats.error_similarity_alert >= 1) {
                         priv->can.sec_state = CAN_STATE_SEC_ERROR_PASSIVE;
                 } else if (priv->can.can_sec_stats.error_id_violation < 1 || 
-                        priv->can.can_sec_stats.error_similarity < 1 || 
-                        priv->can.can_sec_stats.error_rate_limiting < 1) {
+                        priv->can.can_sec_stats.error_similarity_alert < 1) {
                         priv->can.sec_state = CAN_STATE_SEC_ERROR_ACTIVE;
                 } 
 
