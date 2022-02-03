@@ -1079,6 +1079,16 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
         if (compare_set[frame->can_id] == CIDs[frame->can_id] || (CIDs[frame->can_id] - compare_set[frame->can_id]) > 0 ) {
                 num_intersection++;
         }
+        if (++window_i >= window_size) {
+                simpson = overlap_coefficient(num_intersection, window_size);
+                similarity_alert = similarity_analysis(simpson, k, div, ave, window_size);
+                                                        
+                //initialize params
+                num_intersection = 0;
+                window_i = 0;
+                memset(compare_set, 0, sizeof(compare_set));
+        }
+
         if (can_id_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be self-isolation state.
                 priv->can.can_sec_stats.error_id_violation++;
                 if (priv->can.sec_state == CAN_STATE_SEC_ERROR_PASSIVE)
@@ -1097,16 +1107,11 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
 #ifdef EVAL_IT
                 if (eval_start_ns == 0) eval_start_ns = ktime_get_clocktai_ns();
 #endif
-        } else if (++window_i >= window_size) {
-                simpson = overlap_coefficient(num_intersection, window_size);
-                //printf("[similarity_IDS] SimpsonCoefficient=%lf\n", SimpsonCoefficient);
-                similarity_alert = similarity_analysis(simpson, k, div, ave, window_size);
-                if (similarity_alert == 1) priv->can.can_sec_stats.error_similarity++;
-                                                        
-                //initialize params
-                num_intersection = 0;
-                window_i = 0;
-                memset(compare_set, 0, sizeof(compare_set));
+        } else if (similarity_alert == 1) {
+                priv->can.can_sec_stats.error_similarity++;
+#ifdef DEBUG
+                printk(KERN_NOTICE "[IVNProtect] LOG:Similarity_alert SC:%d", simpson);
+#endif
         } else {
                 if (send_success_cnt++%RECOVERY_RATE == 0) {
                         priv->can.can_sec_stats.error_id_violation = priv->can.can_sec_stats.error_id_violation <= 0 ? 0 : priv->can.can_sec_stats.error_id_violation - 1; 
