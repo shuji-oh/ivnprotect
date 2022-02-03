@@ -1082,7 +1082,9 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
         if (++window_i >= window_size) {
                 simpson = overlap_coefficient(num_intersection, window_size);
                 similarity_alert = similarity_analysis(simpson, k, div, ave, window_size);
-                                                        
+#ifdef DEBUG
+                printk(KERN_NOTICE "[IVNProtect] LOG:Similarity_analysis SC:%d", simpson);
+#endif
                 //initialize params
                 num_intersection = 0;
                 window_i = 0;
@@ -1110,7 +1112,7 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
         } else if (similarity_alert == 1) {
                 priv->can.can_sec_stats.error_similarity++;
 #ifdef DEBUG
-                printk(KERN_NOTICE "[IVNProtect] LOG:Similarity_alert SC:%d", simpson);
+                printk(KERN_NOTICE "[IVNProtect] LOG:Similarity_alert");
 #endif
         } else {
                 if (send_success_cnt++%RECOVERY_RATE == 0) {
