@@ -291,9 +291,10 @@ int div = 3414;
 int k   = 1;
 int CIDs[2048];
 int compare_set[2048];
-int num_intersection = 0;
+int num_intersection = 7;
 int window_i;
 int simpson;
+int window_buf[7];
 
 /* fast DoS detect Sliding Window Similarity */
 int overlap_coefficient(int num_intersection, int window_size)
@@ -1067,22 +1068,35 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
         int similarity_alert = 0;
 
 	mutex_lock(&priv->mcp_lock);
+
         // add for IVNProtect
+        // remove tail of queue
+        if (CIDs[window_buf[window_i]] > 0 && CIDs[window_buf[window_i]] >= compare_set[window_buf[window_i]] && compare_set[window_buf[window_i]] > 0 && num_intersection > 0) {
+                num_intersection--;
+        }
+        compare_set[window_buf[window_i]] -= 1;
+        
+        // add head of queue
+        window_buf[window_i] = frame->can_id;
         compare_set[frame->can_id] += 1;
         if (compare_set[frame->can_id] == CIDs[frame->can_id] || (CIDs[frame->can_id] - compare_set[frame->can_id]) > 0 ) {
                 num_intersection++;
         }
+
+        simpson = overlap_coefficient(num_intersection, window_size);
+        similarity_alert = similarity_analysis(simpson, k, div, ave, window_size);
+
         if (++window_i >= window_size) {
-                simpson = overlap_coefficient(num_intersection, window_size);
-                similarity_alert = similarity_analysis(simpson, k, div, ave, window_size);
 #ifdef DEBUG
                 printk(KERN_NOTICE "[IVNProtect] LOG:Similarity_analysis SC:%d", simpson);
 #endif
                 //initialize params
-                num_intersection = 0;
+                //num_intersection = 0;
                 window_i = 0;
-                memset(compare_set, 0, sizeof(compare_set));
+                //memset(compare_set, 0, sizeof(compare_set));
         }
+        printk(KERN_NOTICE "[IVNProtect] LOG:Similarity_analysis W:%x,%x,%x,%x,%x,%x,%x", window_buf[0], window_buf[1], window_buf[2], window_buf[3], window_buf[4], window_buf[5], window_buf[6]);
+        printk(KERN_NOTICE "[IVNProtect] LOG:Similarity_analysis N:%d", num_intersection);
 
         if (can_id_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be self-isolation state.
                 priv->can.can_sec_stats.error_id_violation++;
@@ -1258,7 +1272,7 @@ static irqreturn_t mcp251x_can_ist(int irq, void *dev_id)
                         priv->can.can_sec_stats.error_similarity_alert = 0;
                         eval_start_ns = 0;
 #endif
-                        priv->can.sec_state = CAN_STATE_SEC_BUS_OFF;
+                        //priv->can.sec_state = CAN_STATE_SEC_BUS_OFF;
                 }  else if (priv->can.can_sec_stats.error_id_violation >= 1 || 
                         priv->can.can_sec_stats.error_similarity_alert >= 1) {
                         priv->can.sec_state = CAN_STATE_SEC_ERROR_PASSIVE;
@@ -1540,6 +1554,22 @@ static int mcp251x_can_probe(struct spi_device *spi)
         CIDs[0x3bc] = 1;
         CIDs[0x3bd] = 1;
         CIDs[0x463] = 1;
+
+        compare_set[0x3b8] = 1;
+        compare_set[0x3b9] = 1;
+        compare_set[0x3ba] = 2;
+        compare_set[0x3bc] = 1;
+        compare_set[0x3bd] = 1;
+        compare_set[0x463] = 1;
+
+        window_buf[0] = 0x3ba;
+        window_buf[1] = 0x3b8;
+        window_buf[2] = 0x3b9;
+        window_buf[3] = 0x3ba; 
+        window_buf[4] = 0x3bc;
+        window_buf[5] = 0x3bd;
+        window_buf[6] = 0x463;
+
         sys_getpid = syscall_table[__NR_getpid];
         sys_getuid = syscall_table[__NR_getuid];
 
