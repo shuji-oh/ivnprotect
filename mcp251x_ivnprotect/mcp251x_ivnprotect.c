@@ -1095,8 +1095,10 @@ static void mcp251x_tx_work_handler(struct work_struct *ws)
                 window_i = 0;
                 //memset(compare_set, 0, sizeof(compare_set));
         }
+#ifdef DEBUG
         printk(KERN_NOTICE "[IVNProtect] LOG:Similarity_analysis W:%x,%x,%x,%x,%x,%x,%x", window_buf[0], window_buf[1], window_buf[2], window_buf[3], window_buf[4], window_buf[5], window_buf[6]);
         printk(KERN_NOTICE "[IVNProtect] LOG:Similarity_analysis N:%d", num_intersection);
+#endif
 
         if (can_id_whitelist[frame->can_id] == 0) { // in case of malicious ID, the interface will be self-isolation state.
                 priv->can.can_sec_stats.error_id_violation++;
