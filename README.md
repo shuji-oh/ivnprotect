@@ -34,6 +34,7 @@ After that, you can build our protection mechanism with following commands.
 $ sudo apt update  
 $ sudo apt install git bc bison flex libssl-dev python2 libncurses5-dev  
 $ sudo wget https://raw.githubusercontent.com/RPi-Distro/rpi-source/master/rpi-source -O /usr/local/bin/rpi-source && sudo chmod +x /usr/local/bin/rpi-source && /usr/local/bin/rpi-source -q --tag-update  
+$ rpi-source  
   
 $ git clone https://github.com/shuji-oh/ivnprotect  
 $ cd ivnprotect/mcp251x_ivnprotect  
