@@ -1,6 +1,6 @@
 # IVNProtect: Isolable and Traceable Lightweight CAN Bus Kernel-Level Protection for Securing In-Vehicle Communication
 
-[Shuji Ohira, Araya Kibrom Desta, Ismail Arai, Kazutoshi Fujikawa, "IVNProtect: Isolable and Deployable CAN Bus Kernel-Level Protection for Securing In-Vehicle Communication," In Proceedings of the 2022 *** (*** ’22), pp.xx–xx, July. 2022.]()
+[Shuji Ohira, Araya Kibrom Desta, Ismail Arai, Kazutoshi Fujikawa, "IVNProtect: Isolable and Deployable CAN Bus Kernel-Level Protection for Securing In-Vehicle Communication," In Proceedings of the 2023 *** (*** ’23), pp.xx–xx, Feb. 2023.]()
 
 ```
 @inproceedings{ohira2022ivnprotect,
@@ -8,7 +8,7 @@
   author={Ohira, Shuji and Kibrom Desta, Araya and Arai, Ismail and Fujikawa, Kazutoshi},
   booktitle={},
   pages={},
-  year={2022},
+  year={2023},
   doi={},
   organization={}
 }
