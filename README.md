@@ -5,7 +5,7 @@
 ```
 @inproceedings{ohira2022ivnprotect,
   title={{IVNProtect: Isolable and Traceable Lightweight CAN Bus Kernel-Level Protection for Securing In-Vehicle Communication}},
-  author={Ohira, Shuji and Kibrom Desta, Araya and Arai, Ismail and Fujikawa, Kazutoshi},
+  author={Ohira, Shuji and Araya, Kibrom Desta and Arai, Ismail and Fujikawa, Kazutoshi},
   booktitle={Proceedings of the 9th International Conference on Information Systems Security and Privacy (ICISSP)},
   pages={1--12},
   year={2023},
