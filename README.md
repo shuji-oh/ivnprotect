@@ -9,8 +9,7 @@
   booktitle={Proceedings of the 9th International Conference on Information Systems Security and Privacy (ICISSP)},
   pages={1--12},
   year={2023},
-  doi={},
-  organization={}
+  doi={}
 }
 ```
 
