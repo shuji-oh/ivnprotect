@@ -1,12 +1,12 @@
-# IVNProtect: Isolable and Traceable Lightweight CAN-Bus Kernel-Level Protection for Securing In-Vehicle Communication
+# IVNPROTECT: Isolable and Traceable Lightweight CAN-Bus Kernel-Level Protection for Securing In-Vehicle Communication
 
-[Shuji Ohira, Araya Kibrom Desta, Ismail Arai, Kazutoshi Fujikawa, "IVNProtect: Isolable and Traceable Lightweight CAN-Bus Kernel-Level Protection for Securing In-Vehicle Communication," In Proceedings of the 9th International Conference on Information Systems Security and Privacy (ICISSP’23), pp.1–12, Feb. 2023.]()
+[Shuji Ohira, Araya Kibrom Desta, Ismail Arai, Kazutoshi Fujikawa, "IVNProtect: Isolable and Traceable Lightweight CAN-Bus Kernel-Level Protection for Securing In-Vehicle Communication," In Proceedings of the 9th International Conference on Information Systems Security and Privacy (ICISSP 2023), pp.1–12, Feb. 2023.]()
 
 ```
 @inproceedings{ohira2022ivnprotect,
-  title={{IVNProtect: Isolable and Traceable Lightweight CAN-Bus Kernel-Level Protection for Securing In-Vehicle Communication}},
+  title={{IVNPROTECT: Isolable and Traceable Lightweight CAN-Bus Kernel-Level Protection for Securing In-Vehicle Communication}},
   author={Ohira, Shuji and Araya, Kibrom Desta and Arai, Ismail and Fujikawa, Kazutoshi},
-  booktitle={Proceedings of the 9th International Conference on Information Systems Security and Privacy (ICISSP)},
+  booktitle={In Proceedings of the 9th International Conference on Information Systems Security and Privacy (ICISSP 2023)},
   pages={1--12},
   year={2023},
   doi={}
